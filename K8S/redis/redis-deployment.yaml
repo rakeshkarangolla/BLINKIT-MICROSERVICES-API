@@ -1,0 +1,61 @@
+# =============================================================================
+# In-cluster Redis 7. Single-replica, ephemeral storage — fine for cache use.
+# Move to Azure Cache for Redis if you need durability or HA.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: blinkit
+  labels:
+    app: redis
+    tier: data
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # Don't roll a cache — old pod's data is gone anyway
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        tier: data
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        args:
+        - "--maxmemory"
+        - "128mb"
+        - "--maxmemory-policy"
+        - "allkeys-lru"
+        ports:
+        - name: redis
+          containerPort: 6379
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3

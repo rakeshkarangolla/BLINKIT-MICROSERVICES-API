@@ -1,0 +1,18 @@
+# =============================================================================
+# ai-recommendation-service ClusterIP — reached by the api-gateway only.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-recommendation-service
+  namespace: blinkit
+  labels:
+    app: ai-recommendation-service
+spec:
+  type: ClusterIP
+  selector:
+    app: ai-recommendation-service
+  ports:
+  - name: http
+    port: 8090
+    targetPort: 8090

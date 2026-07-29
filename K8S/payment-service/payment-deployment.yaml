@@ -1,0 +1,93 @@
+# =============================================================================
+# payment-service — simulated payments, updates order-service on lifecycle.
+# -----------------------------------------------------------------------------
+# Inter-service URLs and Redis are pinned explicitly under `env:` so the
+# pod stays correct even if `platform-config` is missing or stale. Explicit
+# `env:` always wins over `envFrom`.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: blinkit
+  labels:
+    app: payment-service
+    tier: backend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+        tier: backend
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: acr-secret
+      containers:
+      - name: payment-service
+        image: blinkitaiacr.azurecr.io/payment-service:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8085
+
+        envFrom:
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: payment-secret
+
+        env:
+        # Pinned wiring — required, must NOT depend on the configmap being present.
+        - name: ORDER_SERVICE_BASE_URL
+          value: "http://order-service:8084"
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service:8081"
+        - name: REDIS_SERVER_HOST
+          value: "redis"
+        - name: REDIS_SERVER_PORT
+          value: "6379"
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=50 -Djava.security.egd=file:/dev/./urandom"
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8085
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8085
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8085
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3

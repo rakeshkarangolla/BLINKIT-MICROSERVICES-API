@@ -1,0 +1,110 @@
+# =============================================================================
+# api-gateway — Spring Cloud Gateway, public ingress for /api/**
+# -----------------------------------------------------------------------------
+# enableServiceLinks: false       — disables kubelet's auto-injection of
+#                                   <SVC>_PORT=tcp://... env vars, which
+#                                   would otherwise clobber REDIS_PORT and
+#                                   break the rate-limit Redis client.
+# REDIS_HOST / REDIS_PORT         — set explicitly so even if a future pod
+#                                   spec turns service links back on, the
+#                                   explicit env wins (kubelet won't add a
+#                                   service env var that already exists).
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: blinkit
+  labels:
+    app: api-gateway
+    tier: edge
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        tier: edge
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: acr-secret
+      containers:
+      - name: api-gateway
+        image: blinkitaiacr.azurecr.io/api-gateway:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+
+        envFrom:
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: api-gateway-secret
+
+        env:
+        # Pinned wiring — required, must NOT depend on the configmap being present.
+        # Gateway routes use these env vars; missing ones make the route fall
+        # back to the application.yml localhost defaults and 503 on first call.
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service:8081"
+        - name: PRODUCT_SERVICE_URL
+          value: "http://product-service:8082"
+        - name: CART_SERVICE_URL
+          value: "http://cart-service:8083"
+        - name: ORDER_SERVICE_URL
+          value: "http://order-service:8084"
+        - name: PAYMENT_SERVICE_URL
+          value: "http://payment-service:8085"
+        - name: AI_RECOMMENDATION_SERVICE_URL
+          value: "http://ai-recommendation-service:8090"
+        # Gateway reads REDIS_HOST/PORT directly (not the *_SERVER_* aliases).
+        # Explicit values override the kubelet's auto-injected REDIS_PORT=tcp://...
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=50 -Djava.security.egd=file:/dev/./urandom"
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30   # ~5 minutes for a cold JVM start
+
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3

@@ -1,0 +1,53 @@
+# =============================================================================
+# Single Ingress fronting both the SPA and the API gateway.
+# -----------------------------------------------------------------------------
+# Uses the AKS-managed nginx ingress controller (ingressClassName: nginx).
+# If you don't have one installed:
+#   helm upgrade --install ingress-nginx ingress-nginx \
+#     --repo https://kubernetes.github.io/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace
+#
+# Routing:
+#   /api/**          -> api-gateway:8080
+#   /actuator/**     -> api-gateway:8080  (gateway exposes its own actuator)
+#   /                -> frontend:80       (everything else lands on the SPA)
+#
+# Replace blinkit.example.com with your real DNS name (or remove `host:`
+# entirely to accept any host, which is fine for AKS demo with the controller's
+# external IP).
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: blinkit-ingress
+  namespace: blinkit
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+      - path: /actuator
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80

@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: product-service-green
+  namespace: blinkit
+  labels:
+    app: product-service
+    version: green
+    tier: backend
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: product-service
+      version: green
+
+  template:
+    metadata:
+      labels:
+        app: product-service
+        version: green
+        tier: backend
+
+    spec:
+      enableServiceLinks: false
+
+      imagePullSecrets:
+      - name: acr-secret
+
+      containers:
+      - name: product-service
+
+        image: blinkitaiacr.azurecr.io/product-service:latest
+        imagePullPolicy: Always
+
+        ports:
+        - name: http
+          containerPort: 8082
+
+        envFrom:
+        - configMapRef:
+            name: platform-config
+
+        - secretRef:
+            name: product-secret
+
+        env:
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+
+        - name: SPRING_DATA_REDIS_PORT
+          value: "6379"
+
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=50 -Djava.security.egd=file:/dev/./urandom"
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8082
+
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8082
+
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8082
+
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3

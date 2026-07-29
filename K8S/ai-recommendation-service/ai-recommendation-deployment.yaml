@@ -1,0 +1,99 @@
+# =============================================================================
+# ai-recommendation-service — FastAPI + sentence-transformers, port 8090
+# -----------------------------------------------------------------------------
+# Cold-start is slow because the model is loaded on first import (~30-60s on
+# AKS B2/D2). startupProbe gives the pod up to ~6 minutes to get there before
+# liveness takes over with a tight check.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-recommendation-service
+  namespace: blinkit
+  labels:
+    app: ai-recommendation-service
+    tier: backend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-recommendation-service
+  template:
+    metadata:
+      labels:
+        app: ai-recommendation-service
+        tier: backend
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: acr-secret
+      containers:
+      - name: ai-recommendation-service
+        image: blinkitaiacr.azurecr.io/ai-recommendation-service:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8090
+
+        envFrom:
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: ai-recommendation-secret
+
+        env:
+        # Pinned wiring — required, must NOT depend on the configmap being present.
+        - name: PRODUCT_SERVICE_BASE_URL
+          value: "http://product-service:8082"
+        # Service uses pydantic-settings field names redis_host/redis_port.
+        # Explicit values override platform-config and any service-link injection.
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: SERVICE_PORT
+          value: "8090"
+        - name: ENVIRONMENT
+          value: "prod"
+        # Force the lighter TF-IDF backend in cluster to keep startup snappy.
+        # Flip back to "auto" once you've sized for the sentence-transformers model.
+        - name: EMBEDDING_BACKEND
+          value: "auto"
+
+        resources:
+          requests:
+            memory: "768Mi"
+            cpu: "300m"
+          limits:
+            memory: "1536Mi"
+            cpu: "1000m"
+
+        startupProbe:
+          httpGet:
+            path: /health/liveness
+            port: 8090
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 36   # ~6 minutes for embedding model load
+
+        livenessProbe:
+          httpGet:
+            path: /health/liveness
+            port: 8090
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: 8090
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: product-service
+  namespace: blinkit
+
+spec:
+  selector:
+    app: product-service
+    version: green
+
+  ports:
+  - port: 8082
+    targetPort: 8082
+
+  type: ClusterIP

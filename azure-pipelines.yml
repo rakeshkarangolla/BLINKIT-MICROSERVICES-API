@@ -1,0 +1,610 @@
+# =========================================================
+# TRIGGER
+# =========================================================
+
+# trigger:
+# - main
+
+# =========================================================
+# AGENT
+# =========================================================
+
+pool:
+  vmImage: ubuntu-latest
+
+# =========================================================
+# VARIABLES
+# =========================================================
+
+variables:
+
+  # Docker Tag
+  tag: '$(Build.BuildId)'
+
+  # Azure DevOps Service Connections
+  acrServiceConnection: 'bit-acr'
+  azureServiceConnection: 'scnew2'
+
+  # AKS Details
+  aksRG: 'blinkit-rg'
+  aksName: 'blinkit-aks'
+
+  # Terraform Backend
+  tfStateRG: 'StatefileRG'
+  tfStateStorage: 'blinkitaisfsa'
+  tfStateContainer: 'statefile'
+  tfStateKey: 'blinkit-aks.tfstate'
+
+  # ACR Repositories
+  frontendRepository: 'frontend-app'
+  gatewayRepository: 'api-gateway'
+  authRepository: 'auth-service'
+  productRepository: 'product-service'
+  cartRepository: 'cart-service'
+  orderRepository: 'order-service'
+  paymentRepository: 'payment-service'
+  aiRepository: 'ai-recommendation-service'
+
+# =========================================================
+# STAGES
+# =========================================================
+
+stages:
+
+# =========================================================
+# STAGE 1 - BUILD AND PUSH
+# =========================================================
+
+- stage: BuildAndPush
+  displayName: Build and Push Docker Images
+
+  jobs:
+
+  - job: DockerBuildPush
+    displayName: Build and Push Images
+
+    steps:
+
+    - checkout: self
+
+    # =====================================================
+    # FRONTEND BLUE
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push Frontend
+      inputs:
+        command: buildAndPush
+        repository: $(frontendRepository)
+        dockerfile: frontend-app/Dockerfile
+        buildContext: frontend-app
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # =====================================================
+    # API GATEWAY
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push API Gateway
+      inputs:
+        command: buildAndPush
+        repository: $(gatewayRepository)
+        dockerfile: api-gateway/Dockerfile
+        buildContext: api-gateway
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # =====================================================
+    # AUTH SERVICE
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push Auth Service
+      inputs:
+        command: buildAndPush
+        repository: $(authRepository)
+        dockerfile: auth-service/Dockerfile
+        buildContext: auth-service
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # =====================================================
+    # PRODUCT SERVICE
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push Product Service
+      inputs:
+        command: buildAndPush
+        repository: $(productRepository)
+        dockerfile: product-service/Dockerfile
+        buildContext: product-service
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # =====================================================
+    # CART SERVICE
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push Cart Service
+      inputs:
+        command: buildAndPush
+        repository: $(cartRepository)
+        dockerfile: cart-service/Dockerfile
+        buildContext: cart-service
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # =====================================================
+    # ORDER SERVICE
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push Order Service
+      inputs:
+        command: buildAndPush
+        repository: $(orderRepository)
+        dockerfile: order-service/Dockerfile
+        buildContext: order-service
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # =====================================================
+    # PAYMENT SERVICE
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push Payment Service
+      inputs:
+        command: buildAndPush
+        repository: $(paymentRepository)
+        dockerfile: payment-service/Dockerfile
+        buildContext: payment-service
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # =====================================================
+    # AI RECOMMENDATION SERVICE
+    # =====================================================
+
+    - task: Docker@2
+      displayName: Build & Push AI Recommendation Service
+      inputs:
+        command: buildAndPush
+        repository: $(aiRepository)
+        dockerfile: ai-recommendation-service/Dockerfile
+        buildContext: ai-recommendation-service
+        containerRegistry: $(acrServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+# =========================================================
+# STAGE 2 - TERRAFORM
+# =========================================================
+
+- stage: Terraform
+  displayName: Terraform Infrastructure
+
+  # dependsOn: BuildAndPush
+
+  jobs:
+
+  - job: TerraformApply
+    displayName: Terraform Apply
+
+    steps:
+
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: latest
+
+    - task: TerraformTask@5
+      displayName: Terraform Init
+      inputs:
+        provider: azurerm
+        command: init
+        workingDirectory: Terraform
+        backendServiceArm: $(azureServiceConnection)
+        backendAzureRmResourceGroupName: $(tfStateRG)
+        backendAzureRmStorageAccountName: $(tfStateStorage)
+        backendAzureRmContainerName: $(tfStateContainer)
+        backendAzureRmKey: $(tfStateKey)
+
+    - task: TerraformTask@5
+      displayName: Terraform Apply
+      inputs:
+        provider: azurerm
+        command: apply
+        workingDirectory: Terraform
+        commandOptions: '--auto-approve'
+        environmentServiceNameAzureRM: $(azureServiceConnection)
+      
+    # - task: TerraformTask@5
+    #   inputs:
+    #     provider: 'azurerm'
+    #     command: 'destroy'
+    #     workingDirectory: 'Terraform'
+    #     commandOptions: '--auto-approve'
+    #     environmentServiceNameAzureRM: 'scnew2'
+
+# # =========================================================
+# # STAGE 3 - DEPLOY TO AKS
+# # =========================================================
+
+- stage: KubernetesDeploy
+  displayName: Deploy Application to AKS
+
+  # dependsOn: Terraform
+
+  jobs:
+
+  - job: DeployToAKS
+    displayName: Deploy Blinkit Platform
+
+    steps:
+
+    - checkout: self
+
+    # =====================================================
+    # CONNECT AKS
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Connect to AKS
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          az aks get-credentials \
+            --resource-group $(aksRG) \
+            --name $(aksName) \
+            --overwrite-existing
+
+          kubectl get nodes
+
+    # =====================================================
+    # CREATE NAMESPACE
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Create Namespace
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          kubectl apply -f K8S/namespace.yaml
+
+    # =====================================================
+    # APPLY SECRETS
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Apply Secrets
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          kubectl apply -f K8S/secrets/
+
+    # =====================================================
+    # APPLY CONFIGMAPS
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Apply ConfigMaps
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          kubectl apply -f K8S/configmaps/
+
+    # =====================================================
+    # DEPLOY REDIS
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Deploy Redis
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          kubectl apply -f K8S/redis/
+
+          kubectl rollout status deployment/redis -n blinkit --timeout=180s
+
+    # =====================================================
+    # DEPLOY MICROSERVICES
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Deploy Backend Services
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          kubectl apply -f K8S/auth-service/
+          kubectl apply -f K8S/product-service/
+          kubectl apply -f K8S/cart-service/
+          kubectl apply -f K8S/order-service/
+          kubectl apply -f K8S/payment-service/
+          kubectl apply -f K8S/ai-recommendation-service/
+          kubectl apply -f K8S/api-gateway/
+
+          kubectl rollout status deployment/auth-service -n blinkit --timeout=300s
+          kubectl rollout status deployment/product-service-blue -n blinkit --timeout=300s
+          kubectl rollout status deployment/cart-service -n blinkit --timeout=300s
+          kubectl rollout status deployment/order-service -n blinkit --timeout=300s
+          kubectl rollout status deployment/payment-service -n blinkit --timeout=300s
+          kubectl rollout status deployment/ai-recommendation-service -n blinkit --timeout=300s
+          kubectl rollout status deployment/api-gateway -n blinkit --timeout=300s
+
+    # =====================================================
+    # DEPLOY FRONTEND BLUE
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Deploy Frontend Blue
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          kubectl apply -f K8S/frontend/
+
+          kubectl rollout status deployment/frontend-blue -n blinkit --timeout=300s
+
+    # =====================================================
+    # VALIDATION
+    # =====================================================
+
+    - task: AzureCLI@2
+      displayName: Validate Deployments
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          kubectl get pods -n blinkit
+          kubectl get svc -n blinkit
+          kubectl get deployments -n blinkit
+
+# =========================================================
+# STAGE 4 - BLUE GREEN DEPLOYMENT
+# =========================================================
+
+- stage: BlueGreenDeploy
+  displayName: Blue Green Frontend Deployment
+
+  dependsOn: KubernetesDeploy
+
+  jobs:
+
+  # =======================================================
+  # DETECT CURRENT ENVIRONMENT
+  # =======================================================
+
+  - job: DetectEnvironment
+    displayName: Detect Active Environment
+
+    steps:
+
+    - checkout: self
+
+    - task: AzureCLI@2
+      name: detectEnv
+      displayName: Detect Blue Green Environment
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          az aks get-credentials \
+            --resource-group $(aksRG) \
+            --name $(aksName) \
+            --overwrite-existing
+
+          CURRENT=$(kubectl get svc frontend -n blinkit -o jsonpath='{.spec.selector.version}' 2>/dev/null || echo "blue")
+
+          if [ "$CURRENT" = "blue" ]; then
+            NEXT="green"
+          else
+            NEXT="blue"
+          fi
+
+          echo "Current Environment: $CURRENT"
+          echo "Next Environment: $NEXT"
+
+          echo "##vso[task.setvariable variable=targetEnv;isOutput=true]$NEXT"
+
+  # =======================================================
+  # DEPLOY TARGET ENVIRONMENT
+  # =======================================================
+
+  - job: DeployNewEnvironment
+    displayName: Deploy Target Environment
+
+    dependsOn: DetectEnvironment
+
+    variables:
+      targetEnv: $[ dependencies.DetectEnvironment.outputs['detectEnv.targetEnv'] ]
+
+    steps:
+
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: Deploy Target Environment
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          az aks get-credentials \
+            --resource-group $(aksRG) \
+            --name $(aksName) \
+            --overwrite-existing
+
+          echo "Deploying $(targetEnv) environment"
+
+          kubectl apply -f K8S/frontend/frontend-$(targetEnv)-deployment.yaml
+
+          kubectl rollout restart deployment/frontend-$(targetEnv) -n blinkit
+
+          kubectl rollout status deployment/frontend-$(targetEnv) -n blinkit --timeout=300s
+
+          kubectl get pods -n blinkit
+
+# =========================================================
+# STAGE 5 - AUTO SWITCH TRAFFIC
+# =========================================================
+
+- stage: SwitchTraffic
+  displayName: Auto Switch Frontend Traffic
+
+  dependsOn: BlueGreenDeploy
+
+  variables:
+    targetEnv: $[ stageDependencies.BlueGreenDeploy.DetectEnvironment.outputs['detectEnv.targetEnv'] ]
+
+  jobs:
+
+  - job: SwitchFrontendTraffic
+    displayName: Switch Blue Green Traffic
+
+    steps:
+
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: Switch Frontend Traffic
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          az aks get-credentials \
+            --resource-group $(aksRG) \
+            --name $(aksName) \
+            --overwrite-existing
+
+          echo "===================================="
+          echo "Switching traffic to $(targetEnv)"
+          echo "===================================="
+
+          kubectl patch svc frontend -n blinkit \
+            -p '{"spec":{"selector":{"app":"frontend","version":"$(targetEnv)"}}}'
+
+          echo ""
+          echo "===================================="
+          echo "Frontend Service"
+          echo "===================================="
+
+          kubectl get svc frontend -n blinkit
+
+          echo ""
+          echo "===================================="
+          echo "Frontend Selector"
+          echo "===================================="
+
+          kubectl get svc frontend -n blinkit \
+            -o jsonpath='{.spec.selector.version}'
+
+          echo ""
+          echo ""
+          echo "===================================="
+          echo "Frontend Endpoints"
+          echo "===================================="
+
+          kubectl get endpoints frontend -n blinkit
+# =========================================================
+# STAGE 6 - FINAL VALIDATION
+# =========================================================
+
+- stage: FinalValidation
+  displayName: Final Validation
+
+  dependsOn: SwitchTraffic
+
+  jobs:
+
+  - job: ValidatePlatform
+    displayName: Validate Blinkit Platform
+
+    steps:
+
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: Validate Final Platform
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          az aks get-credentials \
+            --resource-group $(aksRG) \
+            --name $(aksName) \
+            --overwrite-existing
+
+          echo "===================================="
+          echo "Pods"
+          echo "===================================="
+
+          kubectl get pods -n blinkit
+
+          echo "===================================="
+          echo "Services"
+          echo "===================================="
+
+          kubectl get svc -n blinkit
+
+          echo "===================================="
+          echo "Frontend Service Selector"
+          echo "===================================="
+
+          kubectl get svc frontend -n blinkit -o jsonpath='{.spec.selector.version}'
+
+          echo ""
+          echo "===================================="
+          echo "Deployments"
+          echo "===================================="
+
+          kubectl get deployments -n blinkit
