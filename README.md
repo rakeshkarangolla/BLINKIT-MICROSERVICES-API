@@ -3,6 +3,7 @@
 A capstone-grade, cloud-native instant-commerce ("Blinkit-style") platform built as **seven independent services** behind a single API gateway, with a React frontend, AI-driven product recommendations, Redis caching, distributed JWT auth, and database-per-service Postgres. Everything runs locally with one `docker compose up`, and is structured for a clean lift onto Azure Kubernetes Service.
 
 > 📚 **For AI assistants and new contributors:** start with [PLATFORM_CONTEXT.md](docs/guides/PLATFORM_CONTEXT.md), [SERVICE_SUMMARIES.md](docs/guides/SERVICE_SUMMARIES.md), and [AI_ASSISTANT_GUIDE.md](docs/guides/AI_ASSISTANT_GUIDE.md) before scanning the whole tree.
+> Check the [troubleshooting guide](docs/troubleshooting/troubleshooting.md) for common issues with Terraform state, AKS kubeconfig, ACR permissions, K8s deployments, and more.
 
 ---
 
