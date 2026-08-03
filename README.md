@@ -409,9 +409,25 @@ cd frontend-app && npm install && npm run dev
 | Database-per-service Flyway migrations | ✅ all auto-applied |
 | `ApiResponse<T>` envelope across services | ✅ |
 | Redis Phase 1 — product cache, AI cache, gateway rate-limit | ✅ shipped |
-| Redis Phase 2+ — cart snapshot, payment idempotency | ⬜ planned |
-| AKS / Terraform | ⬜ planned |
-| Azure DevOps CI/CD | ⬜ planned |
+| Redis Phase 2+ — cart snapshot, payment idempotency | ✅ implemented |
+| AKS / Terraform | ✅ implemented |
+| Azure DevOps CI/CD | ✅ implemented |
+
+## Planned Enhancements
+
+| Enhancement | Status |
+|-------------|--------|
+| GitOps workflow with ArgoCD | ⬜ planned |
+| Helm-based Kubernetes deployments | ⬜ planned |
+| SonarQube quality gates and security scanning integration | ⬜ planned |
+| Container vulnerability scanning using Trivy | ⬜ planned |
+| Terraform security scanning with Checkov | ⬜ planned |
+| Istio service mesh with mTLS and traffic management | ⬜ planned |
+| Prometheus monitoring and Grafana dashboards | ⬜ planned |
+| Centralized logging with Azure Monitor / ELK | ⬜ planned |
+| Azure cost optimization and cloud governance improvements | ⬜ planned |
+| Kubernetes autoscaling using HPA | ⬜ planned |
+| Kubernetes policy enforcement using OPA/Kyverno | ⬜ planned |
 
 ---
 
